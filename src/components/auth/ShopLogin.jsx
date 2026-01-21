@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, KeyRound, Lock, Eye, EyeOff, AlertTriangle, Store } from "lucide-react";
-import { getShop, getShopByEmail } from "../../utils/shopIndexedDB";
-import { verifyPassword } from "../../utils/passwordUtils";
+import { getShop, getShopByEmail, saveShop } from "../../utils/shopIndexedDB";
+import { verifyPassword, hashPassword } from "../../utils/passwordUtils";
 import { getRememberedShop, saveRememberedShop, clearRememberedShop } from "../../utils/sessionManager";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { toast } from "../common/Toast.jsx";
@@ -39,6 +39,14 @@ export default function ShopLogin() {
   const [isLocked, setIsLocked] = useState(false);
   const [lockoutTime, setLockoutTime] = useState(0);
   const [countdown, setCountdown] = useState(0);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1: Enter DID, 2: Set new password
+  const [resetData, setResetData] = useState({
+    shopDID: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [resetErrors, setResetErrors] = useState({});
 
   useEffect(() => {
     try {
@@ -220,6 +228,75 @@ export default function ShopLogin() {
 
   const hasErrors = Object.values(errors).some((e) => e);
 
+  const handleResetPassword = async () => {
+    if (resetStep === 1) {
+      // Verify Shop DID exists
+      if (!resetData.shopDID.trim()) {
+        setResetErrors({ shopDID: "Shop DID is required" });
+        return;
+      }
+      
+      const shop = await getShop(resetData.shopDID.trim());
+      if (!shop) {
+        setResetErrors({ shopDID: "Shop DID not found" });
+        toast.error("Shop DID not found. Please check and try again.");
+        return;
+      }
+      
+      setResetErrors({});
+      setResetStep(2);
+      toast.success("Shop verified! Now set your new password.");
+    } else if (resetStep === 2) {
+      // Validate and update password
+      const nextErrors = {};
+      if (!resetData.newPassword) {
+        nextErrors.newPassword = "New password is required";
+      } else if (resetData.newPassword.length < 4) {
+        nextErrors.newPassword = "Password must be at least 4 characters";
+      }
+      if (resetData.newPassword !== resetData.confirmPassword) {
+        nextErrors.confirmPassword = "Passwords do not match";
+      }
+      
+      if (Object.keys(nextErrors).length > 0) {
+        setResetErrors(nextErrors);
+        return;
+      }
+      
+      try {
+        const shop = await getShop(resetData.shopDID.trim());
+        const { hash, salt } = await hashPassword(resetData.newPassword);
+        
+        const updatedShop = {
+          ...shop,
+          passwordHash: hash,
+          salt: salt,
+        };
+        
+        await saveShop(updatedShop);
+        
+        // Clear lockout if exists
+        try {
+          localStorage.removeItem(LOCK_KEYS.lockedUntil);
+          localStorage.removeItem(LOCK_KEYS.attempts);
+        } catch {
+          // ignore
+        }
+        
+        toast.success("Password reset successfully! You can now login.");
+        setShowResetModal(false);
+        setResetStep(1);
+        setResetData({ shopDID: "", newPassword: "", confirmPassword: "" });
+        setResetErrors({});
+        setIsLocked(false);
+        setFailedAttempts(0);
+      } catch (error) {
+        console.error("Password reset failed", error);
+        toast.error("Failed to reset password. Please try again.");
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4 py-16">
       <motion.div
@@ -281,11 +358,11 @@ export default function ShopLogin() {
             <p className="text-[11px]">Time remaining: {formatCountdown(countdown)}</p>
             <button
               type="button"
-              onClick={() => toast("Password reset flow coming soon")}
+              onClick={() => setShowResetModal(true)}
               className="mt-1 inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-[11px] text-white/85 hover:border-white/40 hover:bg-white/10"
             >
               <AlertTriangle className="h-3.5 w-3.5" />
-              Reset via Email (soon)
+              Reset Password
             </button>
           </div>
         ) : (
@@ -406,7 +483,7 @@ export default function ShopLogin() {
                     </label>
                     <button
                       type="button"
-                      onClick={() => toast("Password reset coming soon")}
+                      onClick={() => setShowResetModal(true)}
                       className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
                     >
                       <KeyRound className="h-3 w-3" />
@@ -434,6 +511,120 @@ export default function ShopLogin() {
               </span>
             </button>
           </form>
+        )}
+
+        {/* Password Reset Modal */}
+        {showResetModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-md rounded-2xl border border-sky-500/35 bg-slate-900 p-6 shadow-2xl"
+            >
+              <h2 className="mb-4 text-lg font-bold text-white">
+                Reset Password
+              </h2>
+              
+              {resetStep === 1 ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-white/70">
+                    Enter your Shop DID to verify your identity.
+                  </p>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-[11px] text-white/80">
+                      <Store className="h-3.5 w-3.5 text-sky-300" />
+                      <span>Shop DID</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={resetData.shopDID}
+                      onChange={(e) => {
+                        setResetData({ ...resetData, shopDID: e.target.value });
+                        setResetErrors({});
+                      }}
+                      placeholder="did:loyvault:shop-..."
+                      className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-xs text-white outline-none focus:border-sky-400"
+                    />
+                    {resetErrors.shopDID && (
+                      <p className="flex items-center gap-1 text-[11px] text-red-300">
+                        <AlertTriangle className="h-3 w-3" /> {resetErrors.shopDID}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-white/70">
+                    Set your new password for <span className="font-mono text-sky-300">{resetData.shopDID.slice(0, 30)}...</span>
+                  </p>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-[11px] text-white/80">
+                      <Lock className="h-3.5 w-3.5 text-sky-300" />
+                      <span>New Password</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={resetData.newPassword}
+                      onChange={(e) => {
+                        setResetData({ ...resetData, newPassword: e.target.value });
+                        setResetErrors({});
+                      }}
+                      placeholder="Enter new password"
+                      className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-xs text-white outline-none focus:border-sky-400"
+                    />
+                    {resetErrors.newPassword && (
+                      <p className="flex items-center gap-1 text-[11px] text-red-300">
+                        <AlertTriangle className="h-3 w-3" /> {resetErrors.newPassword}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-[11px] text-white/80">
+                      <Lock className="h-3.5 w-3.5 text-sky-300" />
+                      <span>Confirm Password</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={resetData.confirmPassword}
+                      onChange={(e) => {
+                        setResetData({ ...resetData, confirmPassword: e.target.value });
+                        setResetErrors({});
+                      }}
+                      placeholder="Confirm new password"
+                      className="w-full rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-xs text-white outline-none focus:border-sky-400"
+                    />
+                    {resetErrors.confirmPassword && (
+                      <p className="flex items-center gap-1 text-[11px] text-red-300">
+                        <AlertTriangle className="h-3 w-3" /> {resetErrors.confirmPassword}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetModal(false);
+                    setResetStep(1);
+                    setResetData({ shopDID: "", newPassword: "", confirmPassword: "" });
+                    setResetErrors({});
+                  }}
+                  className="flex-1 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  className="flex-1 rounded-lg bg-gradient-to-r from-loyvault-blueFrom to-loyvault-blueTo px-4 py-2 text-xs font-semibold text-slate-950 transition hover:brightness-110"
+                >
+                  {resetStep === 1 ? "Verify" : "Reset Password"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
 
         <div className="mt-5 flex items-center justify-between text-[11px] text-white/70">

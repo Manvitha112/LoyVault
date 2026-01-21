@@ -1,7 +1,8 @@
 import { openDB } from "idb";
 
 const DB_NAME = "LoyVaultShop";
-const DB_VERSION = 1;
+// Align version with SHOP_DB_VERSION in indexedDB.js to avoid VersionError
+const DB_VERSION = 2;
 
 async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {

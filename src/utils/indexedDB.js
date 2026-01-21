@@ -2,14 +2,14 @@ import { openDB } from "idb";
 import { encryptData, hashPIN } from "./encryption";
 
 const DB_NAME = "LoyVaultWallet";
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 // Single identity record key
 const IDENTITY_KEY = "current";
 
 async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
       if (!db.objectStoreNames.contains("identity")) {
         // Single record store – we always use fixed key "current"
         db.createObjectStore("identity");
@@ -27,6 +27,16 @@ async function getDB() {
 
       if (!db.objectStoreNames.contains("settings")) {
         db.createObjectStore("settings");
+      }
+
+      // New in v2: offers store for customer-side offers
+      if (!db.objectStoreNames.contains("offers")) {
+        db.createObjectStore("offers", { keyPath: "id" });
+      }
+
+      // New in v3: notifications store
+      if (!db.objectStoreNames.contains("notifications")) {
+        db.createObjectStore("notifications", { keyPath: "id" });
       }
     },
   });
@@ -143,6 +153,19 @@ export async function getCredential(id) {
   }
 }
 
+// Lookup a credential by shop DID (helper for flows where you only know shopDID)
+export async function getCredentialByShop(shopDID) {
+  try {
+    const db = await getDB();
+    const all = await db.getAll("credentials");
+    if (!all) return null;
+    return all.find((c) => c.shopDID === shopDID) ?? null;
+  } catch (error) {
+    console.error("[IndexedDB] getCredentialByShop failed", error);
+    return null;
+  }
+}
+
 export async function updateCredential(id, updates) {
   try {
     const db = await getDB();
@@ -170,6 +193,61 @@ export async function deleteCredential(id) {
   } catch (error) {
     console.error("[IndexedDB] deleteCredential failed", error);
     return false;
+  }
+}
+
+// -------------------------
+// Shop-side: Issued Credentials
+// -------------------------
+
+const SHOP_DB_NAME = "LoyVaultShop";
+// Bump version to ensure schema is upgraded for credentials_issued store
+const SHOP_DB_VERSION = 2;
+
+async function getShopDB() {
+  return openDB(SHOP_DB_NAME, SHOP_DB_VERSION, {
+    upgrade(db) {
+      // Always ensure credentials_issued has an auto-incrementing id key
+      if (db.objectStoreNames.contains("credentials_issued")) {
+        db.deleteObjectStore("credentials_issued");
+      }
+
+      db.createObjectStore("credentials_issued", {
+        keyPath: "id",
+        autoIncrement: true,
+      });
+    },
+  });
+}
+
+// For Shop: Save issued credential record
+export async function saveIssuedCredential(credential) {
+  try {
+    const db = await getShopDB();
+    const tx = db.transaction("credentials_issued", "readwrite");
+    await tx.objectStore("credentials_issued").add({
+      ...credential,
+      issuedAt: new Date().toISOString(),
+    });
+    await tx.done;
+    return true;
+  } catch (error) {
+    console.error("[IndexedDB] saveIssuedCredential failed", error);
+    throw error;
+  }
+}
+
+// For Shop: Get all issued credentials for a given shop DID
+export async function getIssuedCredentials(shopDID) {
+  try {
+    const db = await getShopDB();
+    const all = await db.getAll("credentials_issued");
+    const list = all ?? [];
+    if (!shopDID) return list;
+    return list.filter((c) => c.shopDID === shopDID);
+  } catch (error) {
+    console.error("[IndexedDB] getIssuedCredentials failed", error);
+    return [];
   }
 }
 
