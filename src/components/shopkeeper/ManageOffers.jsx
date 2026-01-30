@@ -463,12 +463,13 @@ function CreateOfferModal({ shop, onClose, onSubmit }) {
               <select
                 value={formData.offerType}
                 onChange={(e) => handleChange("offerType", e.target.value)}
-                className="w-full rounded-lg border border-blue-400/30 bg-white/5 px-4 py-3 text-white outline-none focus:border-blue-400 [&>option]:text-gray-900 [&>option]:bg-white"
+                className="w-full rounded-lg border border-blue-400/30 bg-slate-800 px-4 py-3 text-white outline-none focus:border-blue-400"
+                style={{ colorScheme: 'dark' }}
               >
-                <option value="percentage_discount">Percentage Discount</option>
-                <option value="flat_discount">Flat Discount</option>
-                <option value="bonus_points">Bonus Points</option>
-                <option value="free_item">Free Item</option>
+                <option value="percentage_discount" className="bg-slate-800 text-white">Percentage Discount</option>
+                <option value="flat_discount" className="bg-slate-800 text-white">Flat Discount</option>
+                <option value="bonus_points" className="bg-slate-800 text-white">Bonus Points</option>
+                <option value="free_item" className="bg-slate-800 text-white">Free Item</option>
               </select>
             </div>
 
@@ -506,13 +507,14 @@ function CreateOfferModal({ shop, onClose, onSubmit }) {
               <select
                 value={formData.minTier}
                 onChange={(e) => handleChange("minTier", e.target.value)}
-                className="w-full rounded-lg border border-blue-400/30 bg-white/5 px-4 py-3 text-white outline-none focus:border-blue-400 [&>option]:text-gray-900 [&>option]:bg-white"
+                className="w-full rounded-lg border border-blue-400/30 bg-slate-800 px-4 py-3 text-white outline-none focus:border-blue-400"
+                style={{ colorScheme: 'dark' }}
               >
-                <option value="Base">Base (All Members)</option>
-                <option value="Bronze">Bronze</option>
-                <option value="Silver">Silver</option>
-                <option value="Gold">Gold</option>
-                <option value="Platinum">Platinum</option>
+                <option value="Base" className="bg-slate-800 text-white">Base (All Members)</option>
+                <option value="Bronze" className="bg-slate-800 text-white">Bronze</option>
+                <option value="Silver" className="bg-slate-800 text-white">Silver</option>
+                <option value="Gold" className="bg-slate-800 text-white">Gold</option>
+                <option value="Platinum" className="bg-slate-800 text-white">Platinum</option>
               </select>
             </div>
 

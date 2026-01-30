@@ -7,6 +7,8 @@ import authRoutes from "./routes/auth.js";
 import loyaltyRoutes from "./routes/loyalty.js";
 import offerRoutes from "./routes/offers.js";
 import invoiceRoutes from "./routes/invoices.js";
+import redemptionRoutes from "./routes/redemptions.js";
+import productRoutes from "./routes/products.js";
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/loyalty-programs", loyaltyRoutes);
 app.use("/api/offers", offerRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/redemptions", redemptionRoutes);
+app.use("/api/products", productRoutes);
 
 mongoose
   .connect(MONGODB_URI, {

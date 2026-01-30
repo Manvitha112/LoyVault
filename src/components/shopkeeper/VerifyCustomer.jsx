@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Scan, Upload, CheckCircle, Loader, Info } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Scan, Upload, CheckCircle, Loader, Info, Plus, X, ShoppingCart } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast, showError, showSuccess } from "../common/Toast.jsx";
 import { saveIssuedCredential } from "../../utils/indexedDB.js";
@@ -7,6 +7,7 @@ import {
   updateLoyaltyPointsByDid,
   fetchLoyaltyProgramsByDid,
   createInvoice,
+  fetchShopProducts,
 } from "../../utils/apiClient.js";
 import {
   updateCredentialPoints,
@@ -29,6 +30,26 @@ export default function VerifyCustomer({ shop }) {
   const [purchaseAmount, setPurchaseAmount] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   const [showUpdatedCredential, setShowUpdatedCredential] = useState(null);
+  const [html5QrCode, setHtml5QrCode] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [showProductSelector, setShowProductSelector] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+
+  useEffect(() => {
+    if (shop?.shopDID) {
+      loadProducts();
+    }
+  }, [shop?.shopDID]);
+
+  const loadProducts = async () => {
+    try {
+      const data = await fetchShopProducts(shop.shopDID, { activeOnly: true });
+      setProducts(data || []);
+    } catch (error) {
+      console.error("Failed to load products:", error);
+    }
+  };
 
   const startScanning = async () => {
     try {
@@ -36,17 +57,73 @@ export default function VerifyCustomer({ shop }) {
         throw new Error("Camera API not supported in this browser");
       }
 
-      await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-
       setScanning(true);
-      toast.info("Camera scanning will be wired with html5-qrcode soon. For now, use Upload QR.");
+
+      // Wait for DOM to update and render the qr-verify-reader element
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Initialize Html5Qrcode scanner
+      const qrCodeScanner = new Html5Qrcode("qr-verify-reader");
+      setHtml5QrCode(qrCodeScanner);
+
+      // Configure camera settings for mobile
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+      };
+
+      // Start scanning with rear camera
+      await qrCodeScanner.start(
+        { facingMode: "environment" },
+        config,
+        async (decodedText) => {
+          // QR code successfully scanned
+          console.log("Customer QR Code detected:", decodedText);
+          
+          // Stop scanning
+          await stopScanning(qrCodeScanner);
+          
+          // Process the scanned credential
+          handleScanSuccess(decodedText);
+        },
+        (errorMessage) => {
+          // Ignore frequent "not found" errors
+          if (!errorMessage.includes("NotFoundException")) {
+            console.warn("QR scan error:", errorMessage);
+          }
+        }
+      );
+
+      toast.success("Camera started! Scan customer's QR code");
     } catch (error) {
       console.error("Camera access error", error);
-      showError("Camera access denied");
+      setScanning(false);
+      showError("Camera access denied or not available");
     }
   };
+
+  const stopScanning = async (scanner = html5QrCode) => {
+    try {
+      if (scanner && scanner.isScanning) {
+        await scanner.stop();
+        await scanner.clear();
+      }
+      setScanning(false);
+      setHtml5QrCode(null);
+    } catch (err) {
+      console.error("Error stopping scanner:", err);
+    }
+  };
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      if (html5QrCode) {
+        stopScanning(html5QrCode);
+      }
+    };
+  }, [html5QrCode]);
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -139,18 +216,56 @@ export default function VerifyCustomer({ shop }) {
     }
   };
 
+  const handleAddItem = (product) => {
+    const existingItem = selectedItems.find(item => item.productId === product.productId);
+    if (existingItem) {
+      setSelectedItems(selectedItems.map(item => 
+        item.productId === product.productId 
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
+    } else {
+      setSelectedItems([...selectedItems, { ...product, quantity: 1 }]);
+    }
+    toast.success(`Added ${product.name}`);
+  };
+
+  const handleRemoveItem = (productId) => {
+    setSelectedItems(selectedItems.filter(item => item.productId !== productId));
+  };
+
+  const handleUpdateQuantity = (productId, quantity) => {
+    if (quantity <= 0) {
+      handleRemoveItem(productId);
+      return;
+    }
+    setSelectedItems(selectedItems.map(item => 
+      item.productId === productId ? { ...item, quantity } : item
+    ));
+  };
+
+  const calculateTotal = () => {
+    return selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+
+  useEffect(() => {
+    const total = calculateTotal();
+    setPurchaseAmount(total > 0 ? total.toString() : "");
+  }, [selectedItems]);
+
   const handleUpdatePoints = async () => {
     if (!verifiedCustomer) return;
 
-    if (!purchaseAmount || parseFloat(purchaseAmount) <= 0) {
-      toast.error("Please enter valid purchase amount");
+    const amount = selectedItems.length > 0 ? calculateTotal() : parseFloat(purchaseAmount);
+    
+    if (!amount || amount <= 0) {
+      toast.error("Please add items or enter purchase amount");
       return;
     }
 
     setIsUpdating(true);
 
     try {
-      const amount = parseFloat(purchaseAmount);
       const pointsToAdd = Math.floor(amount / 10);
 
       if (pointsToAdd === 0) {
@@ -194,15 +309,24 @@ export default function VerifyCustomer({ shop }) {
       try {
         if (verifiedCustomer.customerDID && shop?.shopDID) {
           const tax = Math.round(amount * 0.18); // 18% GST
+          const lineItems = selectedItems.map(item => ({
+            productId: item.productId,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.price * item.quantity,
+          }));
+          
           const invoiceData = await createInvoice({
             shopDID: shop.shopDID,
             customerDID: verifiedCustomer.customerDID,
             shopName: shop.name || "Shop",
             subtotal: amount,
             tax: tax,
-            total: amount,
+            total: amount + tax,
             pointsAdded: pointsToAdd,
             tierAfter: updatedCredential.tier,
+            lineItems: lineItems.length > 0 ? lineItems : undefined,
           });
           console.log("Invoice created:", invoiceData.transactionId);
         }
@@ -231,6 +355,7 @@ export default function VerifyCustomer({ shop }) {
       });
 
       setPurchaseAmount("");
+      setSelectedItems([]);
       setShowUpdatedCredential(updatedCredential);
 
       setTimeout(() => {
@@ -260,28 +385,32 @@ export default function VerifyCustomer({ shop }) {
         <div className="rounded-xl border border-blue-400/30 bg-white/10 p-6 backdrop-blur-lg">
           <h3 className="mb-4 text-lg font-bold text-white">Scan Customer QR</h3>
 
-          <div className="relative mb-4 flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-black/50">
+          <div className="relative mb-4 overflow-hidden rounded-xl bg-black/50">
             {!scanning ? (
-              <div className="text-center">
-                <Scan className="mx-auto mb-4 h-16 w-16 text-blue-400" />
-                <p className="mb-4 text-blue-300">Camera access needed</p>
-                <button
-                  type="button"
-                  onClick={startScanning}
-                  className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all hover:scale-105 hover:shadow-lg"
-                >
-                  Enable Camera
-                </button>
+              <div className="flex aspect-square items-center justify-center text-center">
+                <div>
+                  <Scan className="mx-auto mb-4 h-16 w-16 text-blue-400" />
+                  <p className="mb-4 text-blue-300">Camera access needed</p>
+                  <button
+                    type="button"
+                    onClick={startScanning}
+                    className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all hover:scale-105 hover:shadow-lg"
+                  >
+                    Enable Camera
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="relative h-full w-full">
-                <div className="absolute inset-0 rounded-xl border-4 border-blue-500/50" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="h-48 w-48 animate-pulse rounded-xl border-4 border-blue-500" />
-                </div>
-                <p className="absolute bottom-4 left-0 right-0 text-center text-xs text-white">
-                  Position customer's QR within frame
-                </p>
+              <div className="relative">
+                {/* Html5Qrcode will inject video here */}
+                <div id="qr-verify-reader" className="w-full" />
+                <button
+                  type="button"
+                  onClick={() => stopScanning()}
+                  className="absolute top-4 right-4 rounded-lg bg-red-500/80 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-all"
+                >
+                  Stop
+                </button>
               </div>
             )}
           </div>
@@ -327,6 +456,151 @@ export default function VerifyCustomer({ shop }) {
           )}
         </div>
       </div>
+
+      {/* Product Selection Section - Only show when customer is verified */}
+      {verifiedCustomer && (
+        <div className="mt-6 rounded-xl border border-purple-400/30 bg-white/10 p-6 backdrop-blur-lg">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white">Purchase Items</h3>
+            <button
+              onClick={() => setShowProductSelector(true)}
+              className="flex items-center gap-2 rounded-lg bg-purple-500 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-600"
+            >
+              <Plus className="h-4 w-4" />
+              Add Products
+            </button>
+          </div>
+
+          {/* Selected Items List */}
+          {selectedItems.length > 0 ? (
+            <div className="space-y-3">
+              {selectedItems.map((item) => (
+                <div
+                  key={item.productId}
+                  className="flex items-center justify-between rounded-lg border border-blue-400/30 bg-white/5 p-3"
+                >
+                  <div className="flex-1">
+                    <div className="font-semibold text-white">{item.name}</div>
+                    <div className="text-sm text-blue-300">
+                      ₹{item.price} × {item.quantity} = ₹{item.price * item.quantity}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleUpdateQuantity(item.productId, item.quantity - 1)}
+                      className="rounded bg-red-500/20 px-2 py-1 text-red-300 hover:bg-red-500/30"
+                    >
+                      -
+                    </button>
+                    <span className="w-8 text-center text-white">{item.quantity}</span>
+                    <button
+                      onClick={() => handleUpdateQuantity(item.productId, item.quantity + 1)}
+                      className="rounded bg-green-500/20 px-2 py-1 text-green-300 hover:bg-green-500/30"
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => handleRemoveItem(item.productId)}
+                      className="ml-2 rounded bg-red-500/20 p-2 text-red-300 hover:bg-red-500/30"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="mt-4 flex items-center justify-between rounded-lg border border-green-400/30 bg-green-500/10 p-4">
+                <span className="text-lg font-bold text-white">Total:</span>
+                <span className="text-2xl font-bold text-white">₹{calculateTotal()}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-blue-400/30 bg-white/5 p-6 text-center">
+              <ShoppingCart className="mx-auto mb-2 h-12 w-12 text-blue-400/50" />
+              <p className="text-sm text-blue-300">No items added yet</p>
+              <p className="text-xs text-blue-400">Click "Add Products" to select items</p>
+            </div>
+          )}
+
+          {/* Manual Amount Entry (if no items selected) */}
+          {selectedItems.length === 0 && (
+            <div className="mt-4">
+              <label className="mb-2 block text-sm text-blue-300">
+                Or enter amount manually:
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={purchaseAmount}
+                onChange={(e) => setPurchaseAmount(e.target.value)}
+                placeholder="Enter amount"
+                className="w-full rounded-lg border border-blue-400/30 bg-white/5 px-4 py-2 text-white placeholder-blue-400/50 outline-none focus:border-blue-400"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Product Selector Modal */}
+      {showProductSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-purple-400/30 bg-gradient-to-br from-purple-900 to-slate-900 p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Select Products</h2>
+              <button
+                onClick={() => setShowProductSelector(false)}
+                className="rounded-lg p-2 text-purple-300 hover:bg-white/10"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              className="mb-4 w-full rounded-lg border border-purple-400/30 bg-white/10 px-4 py-2 text-white placeholder-purple-300/50 focus:border-purple-400 focus:outline-none"
+            />
+
+            <div className="space-y-2">
+              {products
+                .filter((p) =>
+                  p.name.toLowerCase().includes(productSearch.toLowerCase())
+                )
+                .map((product) => (
+                  <button
+                    key={product.productId}
+                    onClick={() => {
+                      handleAddItem(product);
+                      setShowProductSelector(false);
+                      setProductSearch("");
+                    }}
+                    className="flex w-full items-center justify-between rounded-lg border border-purple-400/30 bg-white/10 p-4 text-left transition-all hover:bg-white/20"
+                  >
+                    <div>
+                      <div className="font-semibold text-white">{product.name}</div>
+                      <div className="text-sm text-purple-300">{product.category}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-white">₹{product.price}</div>
+                      {product.unit && product.unit !== "piece" && (
+                        <div className="text-xs text-purple-300">per {product.unit}</div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              {products.filter((p) =>
+                p.name.toLowerCase().includes(productSearch.toLowerCase())
+              ).length === 0 && (
+                <div className="py-12 text-center text-purple-300">
+                  No products found
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showUpdatedCredential && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">

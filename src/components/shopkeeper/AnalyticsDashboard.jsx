@@ -110,12 +110,13 @@ export default function AnalyticsDashboard({ shop }) {
         <select
           value={timeRange}
           onChange={(e) => setTimeRange(e.target.value)}
-          className="rounded-lg border border-purple-400/30 bg-white/5 px-4 py-2 text-white outline-none focus:border-purple-400 [&>option]:bg-slate-900 [&>option]:text-white"
+          className="rounded-lg border border-purple-400/30 bg-slate-800 px-4 py-2 text-white outline-none focus:border-purple-400"
+          style={{ colorScheme: 'dark' }}
         >
-          <option value="all">All Time</option>
-          <option value="today">Today</option>
-          <option value="week">Last 7 Days</option>
-          <option value="month">Last 30 Days</option>
+          <option value="all" className="bg-slate-800 text-white">All Time</option>
+          <option value="today" className="bg-slate-800 text-white">Today</option>
+          <option value="week" className="bg-slate-800 text-white">Last 7 Days</option>
+          <option value="month" className="bg-slate-800 text-white">Last 30 Days</option>
         </select>
       </div>
 

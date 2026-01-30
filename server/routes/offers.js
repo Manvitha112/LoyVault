@@ -88,19 +88,24 @@ router.get("/stats/:shopDID", async (req, res) => {
 router.get("/for-did/:did", async (req, res) => {
   try {
     const { did } = req.params;
+    console.log("[offers] for-did request for DID:", did);
+    
     if (!did) {
       return res.status(400).json({ message: "Customer DID is required" });
     }
 
     // Find all loyalty programs this customer has joined
     const loyaltyPrograms = await LoyaltyProgram.find({ did });
+    console.log("[offers] Found loyalty programs:", loyaltyPrograms.length);
     
     if (!loyaltyPrograms || loyaltyPrograms.length === 0) {
+      console.log("[offers] No loyalty programs found for DID:", did);
       return res.json([]);
     }
 
     // Extract shopDIDs from the loyalty programs
     const shopDIDs = loyaltyPrograms.map(lp => lp.shopDID);
+    console.log("[offers] Shop DIDs:", shopDIDs);
 
     // Find active offers from those shops only
     const now = new Date();
@@ -122,6 +127,7 @@ router.get("/for-did/:did", async (req, res) => {
       ],
     }).sort({ createdAt: -1 });
 
+    console.log("[offers] Found offers:", offers.length);
     res.json(offers);
   } catch (err) {
     console.error("[offers] for-did error", err);

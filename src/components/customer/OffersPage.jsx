@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Gift, Check, Calendar, Tag, TrendingUp, X } from "lucide-react";
-import {
-  getCustomerOffers,
-  saveCustomerOffer,
-  markOfferViewed,
-  markOfferRedeemed,
-} from "../../utils/offerStorage.js";
+import { Gift, Calendar, Tag, TrendingUp, X, Check } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { fetchOffersForDid } from "../../utils/apiClient.js";
+import { fetchOffersForDid, fetchCustomerRedemptions, redeemOffer } from "../../utils/apiClient.js";
 import { QRCodeSVG } from "qrcode.react";
 
 const OffersPage = ({ credentials, userDid }) => {
@@ -26,55 +20,50 @@ const OffersPage = ({ credentials, userDid }) => {
   const loadOffers = async () => {
     setLoading(true);
     try {
-      const localOffers = await getCustomerOffers();
-      let merged = localOffers || [];
+      console.log("[OffersPage] Starting to load offers for DID:", userDid);
 
-      // Also fetch NORMAL offers for all shops this DID is a member of
-      try {
-        if (userDid) {
-          const remote = await fetchOffersForDid(userDid);
-          if (Array.isArray(remote) && remote.length > 0) {
-            const byKey = new Map();
-            merged.forEach((o) => {
-              const key = o.offerId || o.id;
-              if (key) byKey.set(key, o);
-            });
-
-            // Persist any new backend offers into IndexedDB so redeemed/viewed flags stick
-            for (const o of remote) {
-              const key = o._id || o.offerId;
-              if (!key) continue;
-              if (!byKey.has(key)) {
-                await saveCustomerOffer({
-                  id: key,
-                  offerId: key,
-                  shopName: o.shopName,
-                  shopDID: o.shopDID,
-                  title: o.title,
-                  description: o.description,
-                  offerType: o.offerType,
-                  discountValue: o.discountValue,
-                  minTier: o.minTier,
-                  minPurchase: o.minPurchase,
-                  startDate: o.startDate,
-                  endDate: o.endDate,
-                  maxRedemptionsPerCustomer: o.maxRedemptionsPerCustomer,
-                });
-              }
-            }
-
-            // Reload from local DB so viewed/redeemed state comes from IndexedDB
-            const refreshedLocal = await getCustomerOffers();
-            console.log("[OffersPage] Refreshed local offers after save:", refreshedLocal);
-            merged = refreshedLocal || [];
-          }
-        }
-      } catch (apiError) {
-        console.error("[OffersPage] Failed to load backend offers", apiError);
+      if (!userDid) {
+        setOffers([]);
+        return;
       }
 
-      console.log("[OffersPage] Final merged offers:", merged);
-      setOffers(merged);
+      // Fetch offers from backend
+      console.log("[OffersPage] Fetching backend offers for DID:", userDid);
+      const backendOffers = await fetchOffersForDid(userDid);
+      console.log("[OffersPage] Backend offers received:", backendOffers?.length || 0, backendOffers);
+
+      // Fetch redemption state from backend
+      console.log("[OffersPage] Fetching redemptions for DID:", userDid);
+      const redemptions = await fetchCustomerRedemptions(userDid);
+      console.log("[OffersPage] Redemptions received:", redemptions?.length || 0, redemptions);
+
+      // Create a map of redeemed offer IDs
+      const redeemedMap = new Map();
+      redemptions.forEach((r) => {
+        redeemedMap.set(r.offerID, {
+          redeemed: true,
+          redemptionCount: r.redemptionCount,
+          redeemedAt: r.redeemedAt,
+        });
+      });
+
+      // Merge offers with redemption state
+      const offersWithRedemption = backendOffers.map((offer) => {
+        const offerID = offer._id || offer.id;
+        const redemptionInfo = redeemedMap.get(offerID);
+        
+        return {
+          ...offer,
+          id: offerID,
+          offerId: offerID,
+          redeemed: redemptionInfo?.redeemed || false,
+          redemptionCount: redemptionInfo?.redemptionCount || 0,
+          redeemedAt: redemptionInfo?.redeemedAt || null,
+        };
+      });
+
+      console.log("[OffersPage] Final offers with redemption state:", offersWithRedemption?.length || 0, offersWithRedemption);
+      setOffers(offersWithRedemption);
     } catch (error) {
       console.error("Failed to load offers:", error);
       toast.error("Failed to load offers");
@@ -84,14 +73,29 @@ const OffersPage = ({ credentials, userDid }) => {
   };
 
   const handleOfferClick = async (offer) => {
-    if (!offer.viewed) {
-      await markOfferViewed(offer.id);
-      setOffers((prev) =>
-        prev.map((o) => (o.id === offer.id ? { ...o, viewed: true } : o))
-      );
-    }
-
+    // No longer tracking "viewed" state - just display the offer
     setSelectedOffer(offer);
+  };
+
+  const handleRedeem = async (offer) => {
+    try {
+      if (!userDid) {
+        toast.error("User DID not found");
+        return;
+      }
+
+      const offerID = offer._id || offer.id;
+      const shopDID = offer.shopDID;
+
+      console.log("[OffersPage] Redeeming offer:", offerID, "for customer:", userDid);
+      await redeemOffer(userDid, offerID, shopDID);
+      
+      toast.success("Offer redeemed successfully!");
+      loadOffers(); // Reload to get updated redemption state
+    } catch (error) {
+      console.error("Failed to redeem offer:", error);
+      toast.error("Failed to redeem offer");
+    }
   };
 
   const filteredOffers = offers.filter((offer) => {
@@ -115,6 +119,15 @@ const OffersPage = ({ credentials, userDid }) => {
             {activeCount} active {redeemedCount} redeemed
           </p>
         </div>
+        <button
+          type="button"
+          onClick={loadOffers}
+          disabled={loading}
+          className="flex items-center gap-2 rounded-lg bg-purple-500/20 px-4 py-2 text-sm font-semibold text-purple-300 transition-all hover:bg-purple-500/30 disabled:opacity-50"
+        >
+          <TrendingUp className="h-4 w-4" />
+          Refresh
+        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -176,10 +189,8 @@ const OffersPage = ({ credentials, userDid }) => {
           userDid={userDid}
           onClose={() => setSelectedOffer(null)}
           onRedeem={async () => {
-            await markOfferRedeemed(selectedOffer.id);
-            await loadOffers();
+            await handleRedeem(selectedOffer);
             setSelectedOffer(null);
-            toast.success("Offer marked as redeemed!");
           }}
         />
       )}

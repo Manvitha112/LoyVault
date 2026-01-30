@@ -12,6 +12,7 @@ import Analytics from "../components/shopkeeper/Analytics.jsx";
 import InvoiceManagement from "../components/shopkeeper/InvoiceManagement.jsx";
 import AnalyticsDashboard from "../components/shopkeeper/AnalyticsDashboard.jsx";
 import ShopSettings from "../components/shopkeeper/ShopSettings.jsx";
+import ProductManagement from "../components/shopkeeper/ProductManagement.jsx";
 import { toast } from "react-hot-toast";
 import { Menu, X, LogOut } from "lucide-react";
 
@@ -99,6 +100,8 @@ const ShopDashboard = () => {
         return <VerifyCustomer shop={shop} />;
       case "offers":
         return <ManageOffers shop={shop} />;
+      case "products":
+        return <ProductManagement shop={shop} />;
       case "invoices":
         return <InvoiceManagement shop={shop} />;
       case "analytics":

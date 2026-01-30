@@ -133,7 +133,11 @@ export async function getStoredShopDID() {
 export async function saveIssuedCredential(credential) {
   try {
     const db = await getDB();
-    await db.put("credentials_issued", credential);
+    
+    // Remove id field if it exists to let autoIncrement work
+    const { id, ...credentialWithoutId } = credential;
+    
+    await db.add("credentials_issued", credentialWithoutId);
     return true;
   } catch (error) {
     console.error("[ShopIndexedDB] saveIssuedCredential failed", error);

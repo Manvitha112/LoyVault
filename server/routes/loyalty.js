@@ -144,6 +144,7 @@ router.post("/join-by-did", async (req, res) => {
 
     let program;
     if (existing) {
+      existing.did = did; // Ensure did field is set for existing records
       existing.points = points ?? existing.points;
       existing.tier = tier ?? existing.tier;
       if (issuedDate) existing.issuedDate = issuedDate;
@@ -153,6 +154,7 @@ router.post("/join-by-did", async (req, res) => {
       program = await LoyaltyProgram.create({
         customer: customer._id,
         shop: shop._id,
+        did, // Add customer DID for direct queries
         shopDID,
         shopName,
         points,
@@ -192,6 +194,7 @@ router.post("/update-points-by-did", async (req, res) => {
       return res.status(404).json({ message: "Loyalty program not found" });
     }
 
+    program.did = did; // Ensure did field is set
     program.points = points;
     if (tier) program.tier = tier;
     await program.save();

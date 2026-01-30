@@ -4,6 +4,7 @@ const loyaltyProgramSchema = new mongoose.Schema(
   {
     customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },
     shop: { type: mongoose.Schema.Types.ObjectId, ref: "Shop", required: true },
+    did: { type: String, required: true, index: true }, // Customer DID for direct queries
     shopDID: { type: String, required: true },
     shopName: { type: String, required: true },
     points: { type: Number, default: 0 },

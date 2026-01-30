@@ -40,7 +40,7 @@ function StatCard({ icon, label, value }) {
   );
 }
 
-export default function WalletOverview({ credentials = [] }) {
+export default function WalletOverview({ credentials = [], activeOffersCount = 0 }) {
   const stats = useMemo(() => {
     const totalPrograms = credentials.length;
 
@@ -48,14 +48,10 @@ export default function WalletOverview({ credentials = [] }) {
       return sum + (cred?.points || 0);
     }, 0);
 
-    const activeOffers = credentials.reduce((sum, cred) => {
-      return sum + (cred?.offers?.length || 0);
-    }, 0);
-
     const highestTier = getHighestTier(credentials);
 
-    return { totalPrograms, totalPoints, activeOffers, highestTier };
-  }, [credentials]);
+    return { totalPrograms, totalPoints, activeOffers: activeOffersCount, highestTier };
+  }, [credentials, activeOffersCount]);
 
   const isEmpty = !credentials || credentials.length === 0;
 

@@ -64,12 +64,13 @@ export default function LoyaltyCardsGrid({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="rounded-lg border border-purple-400/30 bg-white/10 px-3 py-1 text-xs text-white focus:outline-none"
+            className="rounded-lg border border-purple-400/30 bg-slate-800 px-3 py-1 text-xs text-white focus:outline-none"
+            style={{ colorScheme: 'dark' }}
           >
-            <option value="recent">Recently Added</option>
-            <option value="points">Highest Points</option>
-            <option value="tier">Highest Tier</option>
-            <option value="name">Shop Name</option>
+            <option value="recent" className="bg-slate-800 text-white">Recently Added</option>
+            <option value="points" className="bg-slate-800 text-white">Highest Points</option>
+            <option value="tier" className="bg-slate-800 text-white">Highest Tier</option>
+            <option value="name" className="bg-slate-800 text-white">Shop Name</option>
           </select>
 
           <button

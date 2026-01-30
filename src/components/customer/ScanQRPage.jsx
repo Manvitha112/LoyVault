@@ -39,6 +39,7 @@ export default function ScanQRPage({ onScanComplete }) {
   const [error, setError] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [joinSuccess, setJoinSuccess] = useState(null);
+  const [html5QrCode, setHtml5QrCode] = useState(null);
 
   const startScanning = async () => {
     try {
@@ -46,21 +47,88 @@ export default function ScanQRPage({ onScanComplete }) {
         throw new Error("Camera API not supported in this browser");
       }
 
-      await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-
       setScanning(true);
       setError(null);
 
-      // Placeholder: real QR scanning to be wired later
-      toast("Camera QR scanning will be implemented with a QR library");
+      // Wait for DOM to update and render the qr-reader element
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Initialize Html5Qrcode scanner
+      const qrCodeScanner = new Html5Qrcode("qr-reader");
+      setHtml5QrCode(qrCodeScanner);
+
+      // Configure camera settings for mobile
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0,
+      };
+
+      // Start scanning with rear camera (environment) for mobile devices
+      await qrCodeScanner.start(
+        { facingMode: "environment" },
+        config,
+        async (decodedText) => {
+          // QR code successfully scanned
+          console.log("QR Code detected:", decodedText);
+          
+          // Stop scanning
+          await stopScanning(qrCodeScanner);
+          
+          // Process the scanned QR code
+          try {
+            const qrData = parseQRData(decodedText);
+            
+            if (qrData.type !== "join") {
+              showError("Invalid QR code. Please scan a shop Join QR.");
+              return;
+            }
+            
+            await handleJoinLoyalty(qrData);
+          } catch (parseError) {
+            console.error("QR parsing error:", parseError);
+            showError("Failed to parse QR code data");
+          }
+        },
+        (errorMessage) => {
+          // QR code scan error (can be ignored, happens frequently)
+          // Only log if it's not a "No QR code found" error
+          if (!errorMessage.includes("NotFoundException")) {
+            console.warn("QR scan error:", errorMessage);
+          }
+        }
+      );
+
+      toast.success("Camera started! Point at a QR code to scan");
     } catch (err) {
       console.error("Camera access error", err);
+      setScanning(false);
       setError("Camera access denied or not available");
       showError("Please allow camera access to scan QR codes");
     }
   };
+
+  const stopScanning = async (scanner = html5QrCode) => {
+    try {
+      if (scanner && scanner.isScanning) {
+        await scanner.stop();
+        await scanner.clear();
+      }
+      setScanning(false);
+      setHtml5QrCode(null);
+    } catch (err) {
+      console.error("Error stopping scanner:", err);
+    }
+  };
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      if (html5QrCode) {
+        stopScanning(html5QrCode);
+      }
+    };
+  }, [html5QrCode]);
 
   const handleJoinLoyalty = async (qrData) => {
     setProcessing(true);
@@ -193,29 +261,33 @@ export default function ScanQRPage({ onScanComplete }) {
       <h1 className="mb-6 text-3xl font-bold text-white">📷 Scan QR Code</h1>
 
       <div className="rounded-2xl border border-purple-400/30 bg-white/10 p-8 text-white shadow-[0_0_30px_rgba(168,85,247,0.25)] backdrop-blur-lg">
-        {/* Camera placeholder */}
-        <div className="relative mb-6 flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-black/50">
+        {/* Camera display */}
+        <div className="relative mb-6 overflow-hidden rounded-xl bg-black/50">
           {!scanning ? (
-            <div className="text-center">
-              <Scan className="mx-auto mb-4 h-16 w-16 text-purple-400" />
-              <p className="text-purple-300">Camera access needed</p>
-              <button
-                type="button"
-                onClick={startScanning}
-                className="mt-4 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-semibold hover:scale-105 hover:shadow-lg hover:shadow-purple-500/40 transition-all"
-              >
-                Enable Camera
-              </button>
+            <div className="flex aspect-square items-center justify-center text-center">
+              <div>
+                <Scan className="mx-auto mb-4 h-16 w-16 text-purple-400" />
+                <p className="text-purple-300">Camera access needed</p>
+                <button
+                  type="button"
+                  onClick={startScanning}
+                  className="mt-4 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 text-sm font-semibold hover:scale-105 hover:shadow-lg hover:shadow-purple-500/40 transition-all"
+                >
+                  Enable Camera
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="relative h-full w-full">
-              <div className="absolute inset-0 rounded-xl border-4 border-purple-500/50" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-48 w-48 animate-pulse rounded-xl border-4 border-purple-500" />
-              </div>
-              <p className="absolute bottom-4 left-0 right-0 text-center text-xs text-white">
-                Position QR code within frame
-              </p>
+            <div className="relative">
+              {/* Html5Qrcode will inject video here */}
+              <div id="qr-reader" className="w-full" />
+              <button
+                type="button"
+                onClick={() => stopScanning()}
+                className="absolute top-4 right-4 rounded-lg bg-red-500/80 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-all"
+              >
+                Stop Scanning
+              </button>
             </div>
           )}
         </div>

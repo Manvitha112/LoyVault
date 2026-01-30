@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getAllCredentials } from "../utils/indexedDB.js";
-import { fetchLoyaltyProgramsByDid } from "../utils/apiClient.js";
+import { fetchLoyaltyProgramsByDid, fetchOffersForDid, fetchCustomerRedemptions } from "../utils/apiClient.js";
 import DashboardHeader from "../components/customer/DashboardHeader.jsx";
 import WalletOverview from "../components/customer/WalletOverview.jsx";
 import LoyaltyCardsGrid from "../components/customer/LoyaltyCardsGrid.jsx";
@@ -27,11 +27,45 @@ const CustomerDashboard = () => {
   const [selectedCredential, setSelectedCredential] = useState(null);
   const [showUpdateScanner, setShowUpdateScanner] = useState(false);
   const [showCredentialQR, setShowCredentialQR] = useState(null);
+  const [activeOffersCount, setActiveOffersCount] = useState(0);
 
   // Load credentials on mount
   useEffect(() => {
     loadCredentials();
   }, []);
+
+  // Load active offers count
+  useEffect(() => {
+    if (user?.did) {
+      loadActiveOffersCount();
+    }
+  }, [user?.did]);
+
+  const loadActiveOffersCount = async () => {
+    try {
+      if (!user?.did) return;
+
+      // Fetch offers and redemptions
+      const offers = await fetchOffersForDid(user.did);
+      const redemptions = await fetchCustomerRedemptions(user.did);
+
+      // Create a map of redeemed offer IDs
+      const redeemedSet = new Set(redemptions.map(r => r.offerID));
+
+      // Count active (non-redeemed, non-expired) offers
+      const now = new Date();
+      const activeCount = offers.filter(offer => {
+        const offerID = offer._id || offer.id;
+        const isRedeemed = redeemedSet.has(offerID);
+        const isExpired = offer.endDate && new Date(offer.endDate) < now;
+        return !isRedeemed && !isExpired;
+      }).length;
+
+      setActiveOffersCount(activeCount);
+    } catch (error) {
+      console.error("Failed to load active offers count:", error);
+    }
+  };
 
   const loadCredentials = async () => {
     setLoading(true);
@@ -141,7 +175,7 @@ const CustomerDashboard = () => {
       case "home":
         return (
           <>
-            <WalletOverview credentials={credentials} />
+            <WalletOverview credentials={credentials} activeOffersCount={activeOffersCount} />
             <LoyaltyCardsGrid
               credentials={credentials}
               onCardClick={handleCardClick}

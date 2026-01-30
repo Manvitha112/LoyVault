@@ -9,6 +9,7 @@ import {
   LogOut,
   Store,
   Receipt,
+  Package,
 } from "lucide-react";
 
 const navItems = [
@@ -16,6 +17,7 @@ const navItems = [
   { id: "issue", label: "Issue Credentials", icon: QrCode },
   { id: "verify", label: "Verify Customer", icon: CheckCircle },
   { id: "offers", label: "Manage Offers", icon: Gift },
+  { id: "products", label: "Products", icon: Package },
   { id: "invoices", label: "Invoices", icon: Receipt },
   { id: "analytics", label: "Analytics", icon: TrendingUp },
   { id: "settings", label: "Settings", icon: Settings },

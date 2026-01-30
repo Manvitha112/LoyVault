@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Receipt, Calendar, TrendingUp, Store, FileText } from "lucide-react";
-import { fetchInvoicesForDid } from "../../utils/apiClient.js";
+import { Receipt, Calendar, TrendingUp, Store, FileText, Download } from "lucide-react";
+import { fetchInvoicesForDid, fetchShopDetailsForBill } from "../../utils/apiClient.js";
+import { generateBillPDF } from "../../utils/billGenerator.js";
 import { toast } from "react-hot-toast";
 
 const ReceiptsPage = ({ userDid }) => {
@@ -188,6 +189,8 @@ const ReceiptCard = ({ invoice, onClick }) => {
 };
 
 const ReceiptDetailsModal = ({ invoice, onClose }) => {
+  const [downloading, setDownloading] = useState(false);
+
   const date = new Date(invoice.createdAt);
   const formattedDate = date.toLocaleDateString(undefined, {
     month: "long",
@@ -198,6 +201,23 @@ const ReceiptDetailsModal = ({ invoice, onClose }) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  const handleDownloadBill = async () => {
+    setDownloading(true);
+    try {
+      // Fetch shop details for the bill
+      const shopDetails = await fetchShopDetailsForBill(invoice.shopDID);
+      
+      // Generate and download PDF bill
+      await generateBillPDF(invoice, shopDetails);
+      toast.success("Bill generated successfully!");
+    } catch (error) {
+      console.error("Failed to generate bill:", error);
+      toast.error(error.message || "Failed to generate bill. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -296,14 +316,25 @@ const ReceiptDetailsModal = ({ invoice, onClose }) => {
           </div>
         )}
 
-        {/* Close Button */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 py-4 font-semibold text-white transition-all hover:scale-105"
-        >
-          Close
-        </button>
+        {/* Action Buttons */}
+        <div className="flex gap-4">
+          <button
+            type="button"
+            onClick={handleDownloadBill}
+            disabled={downloading}
+            className="flex-1 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 py-4 font-semibold text-white transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <Download className="h-5 w-5" />
+            {downloading ? "Generating..." : "Download Bill"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 py-4 font-semibold text-white transition-all hover:scale-105"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );

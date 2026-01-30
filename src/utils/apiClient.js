@@ -92,3 +92,69 @@ export async function fetchShopInvoiceStats(shopDID) {
 	if (!shopDID) return null;
 	return request(`/invoices/stats/${encodeURIComponent(shopDID)}`);
 }
+
+// Redemption API functions
+export async function redeemOffer(customerDID, offerID, shopDID) {
+	return request("/redemptions/redeem", {
+		method: "POST",
+		body: JSON.stringify({ customerDID, offerID, shopDID }),
+	});
+}
+
+export async function fetchCustomerRedemptions(customerDID) {
+	if (!customerDID) return [];
+	return request(`/redemptions/customer/${encodeURIComponent(customerDID)}`);
+}
+
+export async function checkOfferRedemption(customerDID, offerID) {
+	if (!customerDID || !offerID) return { redeemed: false, redemptionCount: 0 };
+	return request(`/redemptions/check/${encodeURIComponent(customerDID)}/${encodeURIComponent(offerID)}`);
+}
+
+export async function fetchShopDetailsForBill(shopDID) {
+	if (!shopDID) return null;
+	return request(`/invoices/shop-details/${encodeURIComponent(shopDID)}`);
+}
+
+// Product API functions
+export async function fetchShopProducts(shopDID, filters = {}) {
+	if (!shopDID) return [];
+	const params = new URLSearchParams();
+	if (filters.category) params.append("category", filters.category);
+	if (filters.search) params.append("search", filters.search);
+	if (filters.activeOnly) params.append("activeOnly", "true");
+	const queryString = params.toString();
+	return request(`/products/shop/${encodeURIComponent(shopDID)}${queryString ? `?${queryString}` : ""}`);
+}
+
+export async function fetchProductCategories(shopDID) {
+	if (!shopDID) return [];
+	return request(`/products/shop/${encodeURIComponent(shopDID)}/categories`);
+}
+
+export async function createProduct(productData) {
+	return request("/products", {
+		method: "POST",
+		body: JSON.stringify(productData),
+	});
+}
+
+export async function updateProduct(productId, updates) {
+	return request(`/products/${encodeURIComponent(productId)}`, {
+		method: "PUT",
+		body: JSON.stringify(updates),
+	});
+}
+
+export async function deleteProduct(productId, permanent = false) {
+	return request(`/products/${encodeURIComponent(productId)}${permanent ? "?permanent=true" : ""}`, {
+		method: "DELETE",
+	});
+}
+
+export async function updateProductStock(productId, quantity, operation = "set") {
+	return request(`/products/${encodeURIComponent(productId)}/stock`, {
+		method: "PATCH",
+		body: JSON.stringify({ quantity, operation }),
+	});
+}

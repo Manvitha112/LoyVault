@@ -4,6 +4,29 @@ import Shop from "../models/Shop.js";
 
 const router = express.Router();
 
+// Get shop details for bill generation
+router.get("/shop-details/:shopDID", async (req, res) => {
+  try {
+    const { shopDID } = req.params;
+    const shop = await Shop.findOne({ shopDID });
+    
+    if (!shop) {
+      return res.status(404).json({ message: "Shop not found" });
+    }
+    
+    res.json({
+      shopName: shop.name,
+      address: shop.address || "",
+      gstNumber: shop.gstNumber || "",
+      phone: shop.phone || "",
+      email: shop.email || "",
+    });
+  } catch (err) {
+    console.error("[invoices] shop-details error", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Create a new invoice
 router.post("/", async (req, res) => {
   try {

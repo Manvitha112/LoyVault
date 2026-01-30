@@ -202,7 +202,7 @@ export async function deleteCredential(id) {
 
 const SHOP_DB_NAME = "LoyVaultShop";
 // Bump version to ensure schema is upgraded for credentials_issued store
-const SHOP_DB_VERSION = 2;
+const SHOP_DB_VERSION = 3;
 
 async function getShopDB() {
   return openDB(SHOP_DB_NAME, SHOP_DB_VERSION, {
@@ -225,8 +225,12 @@ export async function saveIssuedCredential(credential) {
   try {
     const db = await getShopDB();
     const tx = db.transaction("credentials_issued", "readwrite");
+    
+    // Remove id field if it exists to let autoIncrement work
+    const { id, ...credentialWithoutId } = credential;
+    
     await tx.objectStore("credentials_issued").add({
-      ...credential,
+      ...credentialWithoutId,
       issuedAt: new Date().toISOString(),
     });
     await tx.done;
@@ -287,34 +291,50 @@ export async function importWallet(jsonData) {
     const db = await getDB();
     const { identity, credentials, settings } = jsonData || {};
 
-    const tx = db.transaction(["identity", "credentials", "settings"], "readwrite");
-
+    // Handle identity store (uses out-of-line keys, no keyPath)
     if (identity) {
-      await tx.objectStore("identity").put(identity, IDENTITY_KEY);
+      const identityTx = db.transaction("identity", "readwrite");
+      const identityStore = identityTx.objectStore("identity");
+      
+      // Clear existing identity first
+      await identityStore.clear();
+      
+      // Identity store was created without keyPath, so we must provide explicit key
+      // Use IDENTITY_KEY constant as the key
+      await identityStore.put(identity, IDENTITY_KEY);
+      
+      await identityTx.done;
     }
 
+    // Handle credentials store (has keyPath: "id" with autoIncrement)
     if (Array.isArray(credentials)) {
-      const credStore = tx.objectStore("credentials");
+      const credTx = db.transaction("credentials", "readwrite");
+      const credStore = credTx.objectStore("credentials");
       await credStore.clear();
+      
       for (const cred of credentials) {
-        // If id present, preserve it; otherwise let autoIncrement assign one
-        if (cred.id != null) {
-          await credStore.put(cred);
-        } else {
-          await credStore.add(cred);
-        }
+        // Remove the id field to let autoIncrement generate new IDs
+        // This prevents conflicts with existing IDs
+        const { id, ...credWithoutId } = cred;
+        await credStore.add(credWithoutId);
       }
+      
+      await credTx.done;
     }
 
+    // Handle settings store (no keyPath, uses explicit keys)
     if (settings && typeof settings === "object") {
-      const settingsStore = tx.objectStore("settings");
+      const settingsTx = db.transaction("settings", "readwrite");
+      const settingsStore = settingsTx.objectStore("settings");
       await settingsStore.clear();
+      
       for (const [key, value] of Object.entries(settings)) {
         await settingsStore.put(value, key);
       }
+      
+      await settingsTx.done;
     }
 
-    await tx.done;
     return true;
   } catch (error) {
     console.error("[IndexedDB] importWallet failed", error);
