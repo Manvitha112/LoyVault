@@ -13,7 +13,7 @@ import productRoutes from "./routes/products.js";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = Number(process.env.PORT);
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/loyvault";
 
 app.use(cors());
