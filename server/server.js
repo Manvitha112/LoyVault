@@ -34,7 +34,7 @@ mongoose
   .connect(MONGODB_URI)
   .then(() => {
     console.log("[LoyVault] Connected to MongoDB");
-    app.listen(PORT, "0.0.0.0"() => {
+    app.listen(PORT, "0.0.0.0",() => {
       console.log(`[LoyVault] API server running on port ${PORT}`);
     });
   })
