@@ -202,7 +202,7 @@ export async function deleteCredential(id) {
 
 const SHOP_DB_NAME = "LoyVaultShop";
 // Bump version to ensure schema is upgraded for credentials_issued store
-const SHOP_DB_VERSION = 3;
+const SHOP_DB_VERSION = 4;
 
 async function getShopDB() {
   return openDB(SHOP_DB_NAME, SHOP_DB_VERSION, {

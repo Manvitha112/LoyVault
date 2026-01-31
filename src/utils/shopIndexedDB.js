@@ -2,7 +2,7 @@ import { openDB } from "idb";
 
 const DB_NAME = "LoyVaultShop";
 // Align version with SHOP_DB_VERSION in indexedDB.js to avoid VersionError
-const DB_VERSION = 2;
+const DB_VERSION = 4;
 
 async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -10,14 +10,21 @@ async function getDB() {
       if (!db.objectStoreNames.contains("shops")) {
         db.createObjectStore("shops", { keyPath: "shopDID" });
       }
-      if (!db.objectStoreNames.contains("credentials_issued")) {
-        db.createObjectStore("credentials_issued", { keyPath: "id" });
+      
+      // Always recreate credentials_issued with autoIncrement
+      if (db.objectStoreNames.contains("credentials_issued")) {
+        db.deleteObjectStore("credentials_issued");
       }
+      db.createObjectStore("credentials_issued", { 
+        keyPath: "id", 
+        autoIncrement: true 
+      });
+      
       if (!db.objectStoreNames.contains("transactions")) {
-        db.createObjectStore("transactions", { keyPath: "id" });
+        db.createObjectStore("transactions", { keyPath: "id", autoIncrement: true });
       }
       if (!db.objectStoreNames.contains("offers")) {
-        db.createObjectStore("offers", { keyPath: "id" });
+        db.createObjectStore("offers", { keyPath: "id", autoIncrement: true });
       }
     },
   });

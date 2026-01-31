@@ -5,7 +5,7 @@ import { openDB } from "idb";
 // -----------
 
 async function getShopDB() {
-  return openDB("LoyVaultShop", 2, {
+  return openDB("LoyVaultShop", 4, {
     upgrade(db) {
       if (!db.objectStoreNames.contains("offers")) {
         db.createObjectStore("offers", { keyPath: "id" });
@@ -16,7 +16,7 @@ async function getShopDB() {
 
 async function getWalletDB() {
   // Keep version in sync with DB_VERSION in indexedDB.js
-  return openDB("LoyVaultWallet", 3, {
+  return openDB("LoyVaultWallet", 4, {
     upgrade(db) {
       if (!db.objectStoreNames.contains("offers")) {
         db.createObjectStore("offers", { keyPath: "id" });
