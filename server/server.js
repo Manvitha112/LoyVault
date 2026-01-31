@@ -13,8 +13,8 @@ import productRoutes from "./routes/products.js";
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT);
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/loyvault";
+const PORT = Number(process.env.PORT) || 10000;
+const MONGODB_URI = process.env.MONGODB_URI ;
 
 app.use(cors());
 app.use(express.json());
@@ -31,13 +31,10 @@ app.use("/api/redemptions", redemptionRoutes);
 app.use("/api/products", productRoutes);
 
 mongoose
-  .connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(MONGODB_URI)
   .then(() => {
     console.log("[LoyVault] Connected to MongoDB");
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0"() => {
       console.log(`[LoyVault] API server running on port ${PORT}`);
     });
   })
